@@ -1,0 +1,169 @@
+---
+title: "week-04-challenge"
+author: "Sam Smith"
+date: "2/8/2022"
+output: html_document
+---
+STEP 1: Get your dictionary - make a function and pull in dictionaries
+```{r}
+load_dictionary <- function(filename){
+  table <- read.table(filename,header=TRUE,sep="\t",stringsAsFactors = FALSE)
+  return(table)
+}
+# load the dictionaries we will use and make them vectors
+solution <- load_dictionary("google-10000-english-usa-no-swears.txt")
+solution_list <- solution$words
+valid <- load_dictionary("collins-scrabble-words-2019.txt")
+valid_list <- valid$words
+```
+
+STEP 2: remove words from solution list so only contains the words found in valid list
+
+```{r}
+solution_list <- intersect(valid_list,solution_list) # there are now 8,336 elements in the list
+```
+
+STEP 3: Pick a random solution - remove non-5-letter words and pick a random one. Split the word into a vector
+of letters.
+```{r}
+# x should be a vector
+pick_solution <- function(x,word_length=5){
+  # only keep words with 5 letters
+  x <- x[which(nchar(solution_list)==word_length)]
+  # randomly choose a word
+  word <- sample(x,1,replace = FALSE)
+  # make into a vector of characters
+  word_vector <- strsplit(word,split=c())
+  # strsplit returns a list so have to unlist it into a vector
+  word_vector <- unlist(word_vector)
+  return(word_vector)
+}
+solution <- pick_solution(solution_list,word_length=5)
+```
+
+STEP 4: Create the play wordle function which allows users to make guesses and returns information about their 
+guesses.
+
+```{r}
+play_wordle <- function(answer,valid_list,num_guesses=6,word_length=5){
+  # initialize the number of guesses the user has at 1
+  x <- 1
+  # tell the user the rules
+  print(paste("You have",num_guesses,"chances to guess a", word_length, "letter word."))
+  # show them the letters of the alphabet
+  print(paste("Letters left:",paste(LETTERS,collapse=" ")))
+  # prompt for guess
+  guess <- readline("Enter your word here, then press <enter>: ")
+  # make sure user inputs a guess of the right length
+  while(nchar(guess)!=word_length){
+    print(paste("Please guess a valid", word_length,"letter word."))
+    guess <- readline("Enter a word here, then press <enter>: ")
+  }
+  # make sure user guesses a word in the valid list
+  while(!toupper(guess) %in% valid_list){
+    print(paste("Not a valid word."))
+    guess <- readline("Enter a word here, then press <enter>: ")
+  }
+  # function that evaluates the guess that user inputs
+  evaluate_guess <- function(guess,answer){
+    # initialize vector to put feedback in
+    feedback <- rep(NaN,word_length)
+    guess_vector <- c()
+    evaluation <- list("feedback"=feedback,"guess"=guess_vector)
+    # split the guess into a vector of letters
+    guess <- strsplit(guess,split=c())
+    guess <- toupper(unlist(guess))
+    # which spots in the word has the user found the right letter? Record those as *'s
+    evaluation$feedback[which(guess == answer)] <- "*"
+    # if the guess is completely right, return evaluation and guess
+    if(setequal(evaluation$feedback,rep("*",5))==TRUE){
+      evaluation$guess <- guess
+    }
+    # if the guess is not completely right, keep checking the answer
+    else{
+      # which spots in the word are incorrect and still need to be solved?
+      unsolved_g <- which(!guess == answer)
+      unsolved_a <- unsolved_g
+      for(i in 1:length(unsolved_g)){
+        # if a letter in an unsolved spot matches between guess and solution
+        if(guess[unsolved_g[i]] %in% answer[unsolved_a]){
+          # record that spot as a "+"
+          evaluation$feedback[unsolved_g[i]] <- "+"
+          # updated unsolved list for the answer
+          unsolved_a <- unsolved_a[-c(which(guess[unsolved_g[i]] == answer[unsolved_a]))]
+        }
+        # letter in an unsolved spot in guess does not match solution
+        else{
+          evaluation$feedback[unsolved_g[i]] <- "-"
+        }
+      }
+    evaluation$guess <- guess
+    }
+    # return feedback
+    return(evaluation)
+  }
+  # evaluate the guess for the first time
+  evaluation <- evaluate_guess(guess,solution)
+  # going to start recording output that will be printed out when game ends
+  eval_output <- evaluation$feedback
+  guess_list <- evaluation$guess
+  # if the answer is right, print out how many guesses it took and their feedback
+  if(setequal(evaluation$feedback,rep("*",5))==TRUE){
+    print("You guessed the word!")
+    print(guess_list,row.names=FALSE)
+    print("1/6")
+    print(evaluation$feedback)
+  }
+  else{
+    # print feedback
+    print(evaluation$feedback)
+    # record that they are moving on to guess 2
+    x <- x + 1
+    # reduce number of letters as an option based on the user's guess
+    new_letters <- LETTERS[which(!LETTERS %in% evaluation$guess)]
+    # keep allowing the user to guess until they get the right answer or they have guessed 6 times
+    while(x < 7 && setequal(evaluation$feedback,rep("*",5)) == FALSE){
+      #show users what letters they have left
+      print(paste("Letters left:",paste(new_letters,collapse=" ")))
+      # ask user for guess
+      guess <- readline("Enter a word here, then press <enter>: ")
+      # make sure user inputs a guess of the right length
+      while(nchar(guess)!=word_length){
+        print(paste("Please guess a", word_length,"letter word."))
+        guess <- readline("Enter a word here, then press <enter>: ")
+      }
+      # make sure user guesses a word in the valid list
+      while(!toupper(guess) %in% valid_list){
+        print(paste("Not a valid word."))
+        guess <- readline("Enter a word here, then press <enter>: ")
+      }
+      # evaluate the guess
+      evaluation <- evaluate_guess(guess,solution)
+      # add feedback to output that will be printed out when game ends
+      eval_output <- rbind(eval_output,evaluation$feedback)
+      # add guess to guess list to be printed at end of game
+      guess_list <- rbind(guess_list,evaluation$guess)
+      if(setequal(evaluation$feedback,rep("*",5))==TRUE){
+        # print how many guesses it took for them to get the right answer
+        print("You guessed the word!")
+        print(guess_list,row.names=FALSE)
+        print(paste0(x,"/6"))
+        # print history of guesses
+        rownames(eval_output) <- 1:x
+        return(print(eval_output))
+      }
+      else{
+        # print feedback
+        print(evaluation$feedback)
+        # reduce number of letters as an option based on user guess
+        new_letters <- new_letters[which(!new_letters %in% evaluation$guess)]
+        # record that user has made another guess
+        x <- x + 1
+      }
+    }
+    print("Sorry, you lose.")
+    print(guess_list,row.names=FALSE)
+    return(eval_output)
+  }
+}
+```
